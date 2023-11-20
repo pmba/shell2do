@@ -1,0 +1,95 @@
+#!/bin/sh
+
+export GUM_CHOOSE_CURSOR_PREFIX="[•] "
+export GUM_CHOOSE_SELECTED_PREFIX="[x] "
+export GUM_CHOOSE_UNSELECTED_PREFIX="[ ] "
+export FOREGROUND="#C1D8C3"
+export BORDER_FOREGROUND="#6A9C89"
+export BORDER="double"
+export GUM_CHOOSE_SELECTED_FOREGROUND="#54B435"
+export GUM_CHOOSE_CURSOR_FOREGROUND="#379237"
+
+file="2do.txt"
+temp_file="$file.tmp"
+
+list() {
+    cat -n "$file"
+}
+
+add_task() {
+    task=$(gum input --placeholder "What's the task title?")
+    echo "[ ] $task" >>"$file"
+}
+
+update_tasks() {
+    if [ -s "$file" ]; then
+        selected_tasks=$(
+            sed '/\[\s\?\]\s.*/d' "$file" | # remove all tasks that are not selected
+                sed 's/\[x\]\s//g' |        # remove all "[x] " prefixes
+                sed ':a;N;$!ba;s/\n/,/g'    # join all lines with a comma
+        )
+
+        updates=$(
+            sed 's/\[[ |x]\]\s//g' "$file" |
+                gum choose --no-limit --selected "$selected_tasks" --header="SPACE to select, ENTER to confirm"
+        )
+
+        while IFS= read -r line; do
+            task=$(echo "$line" | sed 's/\[[ |x]\]\s//g') # remove o prefixo da tarefa
+            if echo "$updates" | grep -q "$task"; then
+                # Se a tarefa estiver na lista de atualizações, marque-a como concluída
+                echo "[x] $task" >>"$temp_file"
+            else
+                # Caso contrário, marque-a como não concluída
+                echo "[ ] $task" >>"$temp_file"
+            fi
+        done <"$file"
+
+        mv "$temp_file" "$file"
+    else
+        gum style --padding "0 1" --margin "1 2" "Just chilling. Nothing to do yet"
+    fi
+}
+
+clear_completed() {
+    gum confirm && (
+        sed '/\[x\]\s.*/d' "$file" >"$temp_file" |
+            mv "$temp_file" "$file"
+    )
+}
+
+menu() {
+    # Menu Options
+    SEE_TASKS="See Tasks"
+    ADD_TASK="Add Task"
+    CLEAR_COMPLETED_TASKS="Clear Completed Tasks"
+    EXIT="Exit"
+
+    while true; do
+        option=$(gum choose "$SEE_TASKS" "$ADD_TASK" "$CLEAR_COMPLETED_TASKS" "$EXIT")
+
+        case "$option" in
+        "$SEE_TASKS")
+            update_tasks
+            ;;
+        "$ADD_TASK")
+            add_task
+            ;;
+        "$CLEAR_COMPLETED_TASKS")
+            clear_completed
+            ;;
+        "$EXIT")
+            exit 0
+            ;;
+        esac
+    done
+}
+
+case "$1" in
+ls)
+    list
+    ;;
+*)
+    menu
+    ;;
+esac
